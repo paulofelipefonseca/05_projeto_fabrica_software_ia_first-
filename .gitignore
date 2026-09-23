@@ -1,0 +1,13 @@
+# Arquivo de configuração local
+.env
+
+# Bancos de dados vetoriais locais e temporários
+workspace/
+
+# Arquivos internos do Python
+__pycache__/
+*.pyc
+.virtualenv/
+.venv/
+.streamlit/
+.pytest_cache/
