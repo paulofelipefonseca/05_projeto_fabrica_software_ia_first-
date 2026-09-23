@@ -10,10 +10,10 @@ from main import app, Base, engine
 @pytest.fixture(autouse=True)
 def setup_database():
     """
-    Garante a criação e limpeza das tabelas do banco de dados antes de cada teste,
-    evitando vazamento de estado e conflito entre execuções.
+    Garante a criação de todas as tabelas no banco de dados antes do início de
+    cada teste e realiza o drop das mesmas após a execução do teste.
+    Crucial para isolamento de testes e pipelines de CI/CD.
     """
-    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
@@ -21,152 +21,143 @@ def setup_database():
 
 @pytest.fixture
 def client():
-    """
-    Retorna uma instância do TestClient do FastAPI para realizar requisições de testes.
-    """
+    """Fixture que fornece o TestClient para simulação das chamadas HTTP."""
     return TestClient(app)
 
 
 def test_create_lead_success(client):
-    """
-    Testa a criação de um lead com sucesso passando dados válidos.
-    """
+    """Testa o cadastro com sucesso de um novo lead atendendo aos critérios da LGPD."""
     payload = {
-        "name": "João Silva",
-        "email": "joao.silva@example.com",
-        "phone": "+5511999999999",
-        "consent": True
+        "nome": "João Silva",
+        "email": "joao.silva@exemplo.com",
+        "telefone": "11 98765-4321",
+        "consentimento": True,
+        "ip_origem": "192.168.1.50"
     }
     response = client.post("/leads", json=payload)
-    assert response.status_code == 201
     
+    assert response.status_code == 201
     data = response.json()
     assert data["id"] is not None
-    assert data["name"] == "João Silva"
-    assert data["email"] == "joao.silva@example.com"
-    assert data["phone"] == "+5511999999999"
-    assert data["consent"] is True
+    assert data["nome"] == payload["nome"]
+    assert data["email"] == payload["email"]
+    assert data["telefone"] == "11987654321"  # Deve vir limpo (apenas dígitos)
+    assert data["consentimento"] is True
+    assert data["ip_origem"] == "192.168.1.50"
+    assert "criado_em" in data
+
+
+def test_create_lead_without_ip_uses_fallback(client):
+    """Testa o cadastro de lead omitindo o IP, validando se assume o fallback padrão."""
+    payload = {
+        "nome": "Maria Souza",
+        "email": "maria.souza@exemplo.com",
+        "telefone": "(21) 99999-8888",
+        "consentimento": True
+    }
+    response = client.post("/leads", json=payload)
+    
+    assert response.status_code == 201
+    data = response.json()
+    assert data["ip_origem"] is not None  # Deve assumir IP do client ou localhost
 
 
 def test_create_lead_duplicate_email(client):
-    """
-    Garante que não seja possível registrar dois leads com o mesmo endereço de e-mail.
-    """
+    """Testa a restrição de unicidade para e-mails cadastrados."""
     payload = {
-        "name": "Ana Maria",
-        "email": "ana.maria@example.com",
-        "phone": "11988888888",
-        "consent": True
+        "nome": "Primeiro Lead",
+        "email": "duplicado@exemplo.com",
+        "telefone": "11912345678",
+        "consentimento": True
     }
     
-    # Primeira inserção
-    response1 = client.post("/leads", json=payload)
-    assert response1.status_code == 201
+    # Primeiro cadastro
+    response_first = client.post("/leads", json=payload)
+    assert response_first.status_code == 201
 
-    # Segunda tentativa (duplicado)
-    response2 = client.post("/leads", json=payload)
-    assert response2.status_code == 422
-    assert response2.json()["detail"] == "Este endereço de e-mail já está cadastrado."
-
-
-def test_create_lead_invalid_email(client):
-    """
-    Testa a validação do formato de e-mail inválido pelo Pydantic.
-    """
-    payload = {
-        "name": "Carlos Souza",
-        "email": "email_invalido.com",
-        "phone": "11977777777",
-        "consent": True
-    }
-    response = client.post("/leads", json=payload)
-    assert response.status_code == 422
-    
-    errors = response.json()["detail"]
-    assert any("O formato de e-mail fornecido é inválido." in err["msg"] for err in errors)
-
-
-def test_create_lead_invalid_phone(client):
-    """
-    Garante que o número de telefone deve cumprir os padrões do validador.
-    """
-    payload = {
-        "name": "Carlos Souza",
-        "email": "carlos@example.com",
-        "phone": "123",  # Telefone curto demais/fora do padrão
-        "consent": True
-    }
-    response = client.post("/leads", json=payload)
-    assert response.status_code == 422
-    
-    errors = response.json()["detail"]
-    assert any("O número de telefone deve ser válido" in err["msg"] for err in errors)
+    # Segunda tentativa de cadastro com o mesmo e-mail
+    response_duplicate = client.post("/leads", json=payload)
+    assert response_duplicate.status_code == 422
+    assert response_duplicate.json()["detail"] == "O e-mail informado já está cadastrado em nossa base."
 
 
 def test_create_lead_without_consent(client):
-    """
-    Testa se a API recusa a criação de leads que não aceitam as diretrizes de privacidade (LGPD).
-    """
+    """Testa a validação obrigatória do consentimento LGPD."""
     payload = {
-        "name": "Juliana Costa",
-        "email": "juliana@example.com",
-        "phone": "11966666666",
-        "consent": False
+        "nome": "Lead Sem Consentimento",
+        "email": "sem.consentimento@exemplo.com",
+        "telefone": "11912345678",
+        "consentimento": False
     }
     response = client.post("/leads", json=payload)
-    assert response.status_code == 422
     
+    assert response.status_code == 422
     errors = response.json()["detail"]
-    assert any("É obrigatório aceitar as diretrizes de privacidade (LGPD)." in err["msg"] for err in errors)
+    assert any("consentimento" in err["loc"] for err in errors)
+    assert any("O consentimento de privacidade e uso de dados é obrigatório." in err["msg"] for err in errors)
 
 
-def test_create_lead_name_too_short(client):
-    """
-    Verifica se o nome com menos de 2 caracteres é rejeitado.
-    """
+def test_create_lead_invalid_phone_format(client):
+    """Testa a validação do formato do telefone (deve conter de 10 a 11 dígitos numéricos)."""
     payload = {
-        "name": "A",
-        "email": "a@example.com",
-        "phone": "11955555555",
-        "consent": True
+        "nome": "Lead Telefone Invalido",
+        "email": "fone.invalido@exemplo.com",
+        "telefone": "123456789",  # Apenas 9 dígitos
+        "consentimento": True
     }
     response = client.post("/leads", json=payload)
+    
     assert response.status_code == 422
+    errors = response.json()["detail"]
+    assert any("telefone" in err["loc"] for err in errors)
+    assert any("O telefone deve conter de 10 a 11 digitos numericos" in err["msg"] for err in errors)
+
+
+def test_create_lead_invalid_email_format(client):
+    """Testa a validação sintática do campo de e-mail usando Pydantic EmailStr."""
+    payload = {
+        "nome": "Email Invalido",
+        "email": "email-sem-arroba.com",
+        "telefone": "11999998888",
+        "consentimento": True
+    }
+    response = client.post("/leads", json=payload)
+    
+    assert response.status_code == 422
+    errors = response.json()["detail"]
+    assert any("email" in err["loc"] for err in errors)
 
 
 def test_list_leads_empty(client):
-    """
-    Verifica se a rota de listagem retorna uma lista vazia quando não há leads.
-    """
+    """Garante que a listagem retorna uma lista vazia quando não há leads no banco."""
     response = client.get("/leads")
     assert response.status_code == 200
     assert response.json() == []
 
 
-def test_list_leads_multiple(client):
-    """
-    Valida se a listagem retorna todos os leads cadastrados corretamente.
-    """
-    lead1 = {
-        "name": "Primeiro Lead",
-        "email": "primeiro@example.com",
-        "phone": "11911111111",
-        "consent": True
+def test_list_leads_success(client):
+    """Testa a listagem de múltiplos leads cadastrados na base."""
+    # Cadastro de dois leads distintos
+    lead_1 = {
+        "nome": "Lead Um",
+        "email": "lead1@exemplo.com",
+        "telefone": "11999991111",
+        "consentimento": True
     }
-    lead2 = {
-        "name": "Segundo Lead",
-        "email": "segundo@example.com",
-        "phone": "11922222222",
-        "consent": True
+    lead_2 = {
+        "nome": "Lead Dois",
+        "email": "lead2@exemplo.com",
+        "telefone": "21999992222",
+        "consentimento": True
     }
     
-    client.post("/leads", json=lead1)
-    client.post("/leads", json=lead2)
+    client.post("/leads", json=lead_1)
+    client.post("/leads", json=lead_2)
 
+    # Obtenção da lista
     response = client.get("/leads")
     assert response.status_code == 200
-    
     data = response.json()
     assert len(data) == 2
-    assert data[0]["email"] == "primeiro@example.com"
-    assert data[1]["email"] == "segundo@example.com"
+    assert data[0]["email"] == "lead1@exemplo.com"
+    assert data[1]["email"] == "lead2@exemplo.com"

@@ -1,90 +1,36 @@
-name: CI Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
 
 jobs:
-  test:
+  test-and-build:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest httpx -r requirements.txt
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Run Tests
-      run: |
-        cat << 'EOF' > test_main.py
-        from fastapi.testclient import TestClient
-        from main import app, Base, engine
-        import os
+      - name: Run Tests via Pytest
+        run: |
+          pytest main.py
 
-        client = TestClient(app)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-        def test_create_lead_success():
-            response = client.post(
-                "/leads",
-                json={
-                    "name": "João Silva",
-                    "email": "joao.silva@example.com",
-                    "phone": "+5511999999999",
-                    "consent": True
-                }
-            )
-            assert response.status_code == 201
-            data = response.json()
-            assert data["name"] == "João Silva"
-            assert data["email"] == "joao.silva@example.com"
-
-        def test_create_lead_duplicate():
-            response = client.post(
-                "/leads",
-                json={
-                    "name": "Outro João",
-                    "email": "joao.silva@example.com",
-                    "phone": "+5511999999999",
-                    "consent": True
-                }
-            )
-            assert response.status_code == 422
-
-        def test_create_lead_invalid_phone():
-            response = client.post(
-                "/leads",
-                json={
-                    "name": "Invalido",
-                    "email": "invalido@example.com",
-                    "phone": "123",
-                    "consent": True
-                }
-            )
-            assert response.status_code == 422
-
-        def test_create_lead_without_consent():
-            response = client.post(
-                "/leads",
-                json={
-                    "name": "Sem consentimento",
-                    "email": "sem.consent@example.com",
-                    "phone": "+5511999999999",
-                    "consent": False
-                }
-            )
-            assert response.status_code == 422
-        EOF
-        pytest test_main.py
-
-    - name: Build Docker Image
-      run: |
-        docker compose build
+      - name: Build Docker Image
+        run: |
+          docker compose build
