@@ -2,7 +2,4 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
-email-validator
 requests
-pytest
-httpx
