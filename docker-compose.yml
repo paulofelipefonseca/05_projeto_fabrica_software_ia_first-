@@ -4,9 +4,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - sqlite_data:/app
+      - lead_data:/app
     environment:
       - PYTHONUNBUFFERED=1
 
 volumes:
-  sqlite_data:
+  lead_data:
