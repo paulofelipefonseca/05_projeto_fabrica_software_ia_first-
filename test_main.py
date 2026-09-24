@@ -18,124 +18,116 @@ def client():
 
 def test_create_lead_success(client):
     payload = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "(11) 99999-9999",
-        "aceitou_lgpd": True
+        "name": "João Silva",
+        "email": "joao.silva@example.com",
+        "phone": "11999998888",
+        "company": "Tech Innovators",
+        "role": "Software Engineer",
+        "consent": True
     }
     response = client.post("/leads", json=payload)
     assert response.status_code == 201
+    
     data = response.json()
     assert data["id"] is not None
-    assert data["nome"] == "João Silva"
-    assert data["email"] == "joao.silva@email.com"
-    assert data["telefone"] == "(11) 99999-9999"
-    assert data["aceitou_lgpd"] is True
-    assert "criado_em" in data
+    assert data["name"] == payload["name"]
+    assert data["email"] == payload["email"]
+    assert data["phone"] == payload["phone"]
+    assert data["company"] == payload["company"]
+    assert data["role"] == payload["role"]
+    assert data["consent"] is True
 
-def test_create_lead_update_existing(client):
-    payload_initial = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "(11) 99999-9999",
-        "aceitou_lgpd": True
+def test_create_lead_duplicate_email(client):
+    payload = {
+        "name": "Maria Souza",
+        "email": "maria.souza@example.com",
+        "phone": "11988887777",
+        "company": "Design Co",
+        "role": "Product Designer",
+        "consent": True
     }
-    resp_init = client.post("/leads", json=payload_initial)
-    assert resp_init.status_code == 201
-    id_initial = resp_init.json()["id"]
+    # Criar o primeiro lead
+    response_first = client.post("/leads", json=payload)
+    assert response_first.status_code == 201
 
-    payload_updated = {
-        "nome": "João S. Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "11988888888",
-        "aceitou_lgpd": True
+    # Tentar criar o segundo lead com o mesmo e-mail
+    response_duplicate = client.post("/leads", json=payload)
+    assert response_duplicate.status_code == 422
+    assert response_duplicate.json()["detail"] == "Este e-mail já foi cadastrado para outra oferta."
+
+def test_create_lead_missing_consent(client):
+    payload = {
+        "name": "Pedro Santos",
+        "email": "pedro.santos@example.com",
+        "phone": "11977776666",
+        "company": "Finance Inc",
+        "role": "Analyst",
+        "consent": False
     }
-    response = client.post("/leads", json=payload_updated)
-    assert response.status_code == 201
-    data = response.json()
-    assert data["id"] == id_initial
-    assert data["nome"] == "João S. Silva"
-    assert "11988888888" in data["telefone"]
+    response = client.post("/leads", json=payload)
+    assert response.status_code == 422
+    
+    # Valida se a mensagem de erro de consentimento disparou no Pydantic
+    errors = response.json()["detail"]
+    assert any("O consentimento dos termos de privacidade (LGPD) é obrigatório." in err["msg"] for err in errors)
 
 def test_create_lead_invalid_phone(client):
     payload = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "123",
-        "aceitou_lgpd": True
+        "name": "Ana Costa",
+        "email": "ana.costa@example.com",
+        "phone": "1234-abc",
+        "company": "Consulting Ltd",
+        "role": "Manager",
+        "consent": True
     }
     response = client.post("/leads", json=payload)
     assert response.status_code == 422
-    assert "telefone" in response.text
+    
+    # Valida se a mensagem de erro de telefone disparou no Pydantic
+    errors = response.json()["detail"]
+    assert any("Formato de telefone inválido. Insira um número válido com DDD." in err["msg"] for err in errors)
 
-def test_create_lead_invalid_email(client):
+def test_create_lead_invalid_email_format(client):
     payload = {
-        "nome": "João Silva",
-        "email": "email_invalido",
-        "telefone": "(11) 99999-9999",
-        "aceitou_lgpd": True
+        "name": "Lucas Lima",
+        "email": "lucas.lima.invalid.com",
+        "phone": "11966665555",
+        "consent": True
     }
     response = client.post("/leads", json=payload)
     assert response.status_code == 422
-    assert "email" in response.text
-
-def test_create_lead_without_lgpd_consent(client):
-    payload = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "(11) 99999-9999",
-        "aceitou_lgpd": False
-    }
-    response = client.post("/leads", json=payload)
-    assert response.status_code == 422
-    assert "aceitou_lgpd" in response.text
+    
+    errors = response.json()["detail"]
+    assert any("value is not a valid email address" in err["msg"].lower() for err in errors)
 
 def test_list_leads_empty(client):
     response = client.get("/leads")
     assert response.status_code == 200
     assert response.json() == []
 
-def test_list_leads_with_data(client):
-    lead1 = {
-        "nome": "Lead Um",
-        "email": "lead1@email.com",
-        "telefone": "(11) 91111-1111",
-        "aceitou_lgpd": True
+def test_list_leads_with_records(client):
+    lead_1 = {
+        "name": "Lead Um",
+        "email": "lead1@teste.com",
+        "phone": "11955554444",
+        "consent": True
     }
-    lead2 = {
-        "nome": "Lead Dois",
-        "email": "lead2@email.com",
-        "telefone": "(11) 92222-2222",
-        "aceitou_lgpd": True
+    lead_2 = {
+        "name": "Lead Dois",
+        "email": "lead2@teste.com",
+        "phone": "21944443333",
+        "consent": True
     }
-    client.post("/leads", json=lead1)
-    client.post("/leads", json=lead2)
+    
+    # Cadastra dois leads
+    assert client.post("/leads", json=lead_1).status_code == 201
+    assert client.post("/leads", json=lead_2).status_code == 201
 
+    # Listar leads
     response = client.get("/leads")
     assert response.status_code == 200
+    
     data = response.json()
     assert len(data) == 2
-    assert data[0]["email"] == "lead1@email.com"
-    assert data[1]["email"] == "lead2@email.com"
-
-def test_get_lead_by_id_success(client):
-    payload = {
-        "nome": "Lead Alvo",
-        "email": "alvo@email.com",
-        "telefone": "(11) 93333-3333",
-        "aceitou_lgpd": True
-    }
-    create_resp = client.post("/leads", json=payload)
-    lead_id = create_resp.json()["id"]
-
-    response = client.get(f"/leads/{lead_id}")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == lead_id
-    assert data["nome"] == "Lead Alvo"
-    assert data["email"] == "alvo@email.com"
-
-def test_get_lead_by_id_not_found(client):
-    response = client.get("/leads/9999")
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Lead não encontrado."
+    assert data[0]["email"] == "lead1@teste.com"
+    assert data[1]["email"] == "lead2@teste.com"

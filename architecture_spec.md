@@ -1,63 +1,68 @@
-Olá! Como seu **Requirements Copilot Sênior**, vou transformar o seu briefing inicial (que é uma excelente ideia de negócio, mas ainda abstrata) em uma especificação técnica e funcional estruturada. 
+Olá! Como seu **Requirements Copilot Sênior**, meu objetivo é transformar essa sua necessidade inicial em uma especificação de requisitos clara, técnica, sem ambiguidades e pronta para ser desenvolvida por uma equipe de engenharia de software.
 
-Para que possamos avançar para a fase de desenvolvimento com segurança, dividi nossa análise em **4 partes**:
-1. **Entendimento do Escopo (Visão Geral)**
-2. **Perguntas de Elucidação (Para refinarmos o projeto)**
-3. **Primeiro Esboço de Requisitos (Funcionais, Não-Funcionais e Regras de Negócio)**
-4. **Estrutura do Banco de Dados (Sugestão Inicial)**
+O seu pedido é um clássico cenário de **Landing Page de Captura de Leads (Geração de Demanda)** com persistência de dados. Embora pareça simples, para garantir o sucesso do projeto, precisamos detalhar o escopo.
+
+Abaixo, apresento uma **primeira versão do Documento de Requisitos (Draft)** baseada em boas práticas e, em seguida, uma série de **perguntas de refinamento** para fecharmos o escopo.
 
 ---
 
-### 1. Entendimento do Escopo (Visão Geral)
-O objetivo é criar uma **Landing Page (Página de Captura)** focada em conversão. O usuário final preencherá um formulário e esses dados serão persistidos de forma segura em um banco de dados para que sua equipe possa utilizá-los posteriormente (vendas, marketing, etc.).
+# 📋 DOCUMENTO DE REQUISITOS (DRAFT V1.0)
+
+## 1. Visão Geral do Sistema
+O sistema consistirá em uma página web (Landing Page) responsiva focada na conversão de visitantes em potenciais clientes (leads). Os dados preenchidos no formulário de captura serão validados e armazenados de forma segura em um banco de dados relacional ou não-relacional.
 
 ---
 
-### 2. Perguntas de Elucidação (O Copilot precisa saber):
-Para detalharmos o escopo exato, por favor, me responda:
-1. **Quais dados você quer capturar?** (Ex: Apenas Nome e E-mail? Ou também Telefone/WhatsApp, Cargo, Nome da Empresa?)
-2. **O que acontece após o cliente clicar em "Enviar"?** (Ex: Ele vê uma mensagem de sucesso na tela, é redirecionado para outra página, ou recebe um e-mail automático?)
-3. **Existe alguma ferramenta de CRM que você já usa?** (Ex: RD Station, HubSpot, ActiveCampaign, ou quer salvar puramente em um banco de dados próprio como PostgreSQL/MySQL?)
-4. **Precisamos de uma área administrativa?** (Uma tela com login para você visualizar e exportar esses clientes em Excel, ou você acessará direto o banco de dados?)
+## 2. Requisitos Funcionais (RF)
 
----
-
-### 3. Primeiro Esboço de Requisitos
-
-Enquanto você pensa nas respostas acima, já estruturei a primeira versão dos requisitos com base nas melhores práticas de Engenharia de Requisitos (incluindo conformidade com a **LGPD**):
-
-#### **Requisitos Funcionais (RF)**
-*   **RF-01: Formulário de Captura:** O sistema deve apresentar um formulário na página web para que o usuário insira seus dados de contato.
-*   **RF-02: Validação de Campos:** O sistema deve validar os campos antes do envio (ex: garantir que o e-mail tenha formato válido `@` e que campos obrigatórios não estejam vazios).
-*   **RF-03: Consentimento LGPD:** O sistema deve exibir um checkbox obrigatório de aceite dos Termos de Privacidade/Consentimento de uso de dados.
-*   **RF-04: Persistência de Dados:** O sistema deve gravar os dados capturados no banco de dados com a data e hora do cadastro.
-*   **RF-05: Feedback de Sucesso:** O sistema deve exibir uma mensagem de sucesso amigável após a gravação dos dados.
-
-#### **Requisitos Não-Funcionais (RNF)**
-*   **RNF-01: Responsividade (Mobile-First):** A página deve ser 100% adaptável para dispositivos móveis (smartphones e tablets).
-*   **RNF-02: Segurança (HTTPS):** A página deve trafegar dados sob protocolo seguro HTTPS (certificado SSL).
-*   **RNF-03: Performance:** A página deve carregar em menos de 2 segundos para evitar a perda de leads.
-*   **RNF-04: Proteção contra Spam:** O formulário deve conter proteção contra robôs (ex: reCAPTCHA v3 invisível).
-
-#### **Regras de Negócio (RN)**
-*   **RN-01: Unicidade de Lead:** O sistema não deve permitir o cadastro duplicado do mesmo endereço de e-mail (ou deve atualizar o cadastro existente com a nova data de interação).
-
----
-
-### 4. Sugestão de Estrutura do Banco de Dados (Tabela: `leads`)
-
-Para salvar os dados de forma organizada, sugiro esta estrutura inicial de tabela:
-
-| Campo | Tipo de Dado | Descrição | Exemplo |
+| ID | Requisito | Descrição | Prioridade |
 | :--- | :--- | :--- | :--- |
-| `id` | UUID / INT (PK) | Identificador único do lead | `1` ou `uuid-v4` |
-| `nome` | VARCHAR(100) | Nome completo do cliente | `João Silva` |
-| `email` | VARCHAR(150) | E-mail (Único) | `joao@email.com` |
-| `telefone` | VARCHAR(20) | Telefone com DDD | `(11) 99999-9999` |
-| `aceitou_lgpd` | BOOLEAN | Confirmação de aceite dos termos | `TRUE` |
-| `criado_em` | TIMESTAMP | Data e hora do cadastro | `2023-10-27 14:30:00` |
+| **RF-001** | **Formulário de Captura** | O sistema deve apresentar um formulário na página principal para captura de dados do usuário. | Essencial |
+| **RF-002** | **Validação de Campos** | O sistema deve validar os campos antes do envio (ex: e-mail válido, telefone com DDD, campos obrigatórios preenchidos). | Essencial |
+| **RF-003** | **Persistência de Dados** | O sistema deve gravar os dados capturados no banco de dados após o clique no botão de envio. | Essencial |
+| **RF-004** | **Feedback de Sucesso** | O sistema deve exibir uma mensagem de sucesso amigável (ou redirecionar para uma página de "Obrigado") após o envio dos dados. | Essencial |
+| **RF-005** | **Consentimento (LGPD)** | O sistema deve conter um checkbox obrigatório de aceite dos Termos de Privacidade/LGPD. | Essencial |
 
 ---
 
-### Próximo Passo:
-Como você quer refinar essa estrutura? Responda às perguntas do **item 2** ou me diga se já podemos gerar o documento de especificação final (PRD) para enviar aos desenvolvedores!
+## 3. Requisitos Não-Funcionais (RNF)
+
+| ID | Categoria | Requisito / Critério de Aceite | Prioridade |
+| :--- | :--- | :--- | :--- |
+| **RNF-001** | **Responsividade** | A página web deve ser *Mobile-First* (funcionar perfeitamente em smartphones, tablets e desktops). | Alta |
+| **RNF-002** | **Desempenho** | A página deve carregar em menos de 2 segundos em conexões 4G estáveis (foco em SEO e conversão). | Alta |
+| **RNF-003** | **Segurança** | Toda a comunicação deve ser criptografada via HTTPS (SSL). | Alta |
+| **RNF-004** | **Segurança** | O banco de dados não deve expor credenciais no código do front-end (uso de API/Backend intermediário). | Alta |
+| **RNF-005** | **Disponibilidade** | A aplicação deve ser hospedada em ambiente Cloud (ex: AWS, Vercel, Heroku) com disponibilidade de 99.9%. | Média |
+
+---
+
+## 4. Regras de Negócio (RN)
+
+*   **RN-001 (Duplicidade):** O sistema não deve permitir o cadastro de dois leads com o mesmo endereço de e-mail. Caso ocorra, deve atualizar o registro existente ou informar que o e-mail já está cadastrado (a definir).
+*   **RN-002 (LGPD):** Os dados do cliente só podem ser gravados se o checkbox de consentimento de uso de dados estiver marcado.
+
+---
+
+# 🔍 PERGUNTAS DE REFINAMENTO (Para refinar o escopo)
+
+Para que eu possa gerar a especificação técnica final (User Stories, Modelo de Dados e Arquitetura), por favor, responda às seguintes questões:
+
+1.  **Quais dados você quer capturar?**
+    *   *(Exemplo padrão: Nome, E-mail, Telefone/WhatsApp, Empresa, Cargo)*
+2.  **O que acontece após o cliente se cadastrar?**
+    *   Ele apenas vê uma mensagem de "Obrigado"?
+    *   Ele recebe um e-mail automático de confirmação?
+    *   Ele é redirecionado para baixar um arquivo (ex: um PDF/E-book) ou para um grupo de WhatsApp?
+3.  **Você precisa de uma área administrativa (Painel) para ver esses clientes cadastrados?**
+    *   *Opção A:* Sim, preciso de uma tela com login para ver a lista de clientes e exportar para Excel.
+    *   *Opção B:* Não, os dados podem ir direto para o banco e eu extraio via consulta técnica.
+    *   *Opção C:* Quero que esses dados sejam enviados automaticamente para uma planilha do Google Sheets ou ferramenta de CRM (ex: RD Station, Hubspot).
+4.  **Existe alguma preferência tecnológica?**
+    *   *Frontend:* React, Vue, HTML/CSS puro, WordPress?
+    *   *Backend/Banco de Dados:* Node.js, Python, PostgreSQL, MySQL, Firebase?
+    *   *(Se não tiver preferência, eu posso sugerir a arquitetura mais eficiente e barata).*
+
+---
+
+**Como deseja proceder?** Pode responder às perguntas acima ou me dizer se quer ajustar algum ponto do rascunho inicial!

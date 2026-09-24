@@ -1,108 +1,91 @@
 import os
 import re
 from typing import Optional, List
-from datetime import datetime
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from sqlalchemy.pool import NullPool
-from pydantic import BaseModel, Field, field_validator, ConfigDict
 
-# Configuração do caminho absoluto do banco SQLite
+from fastapi import FastAPI, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from sqlalchemy import create_engine, Column, Integer, String, Boolean
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import NullPool
+
+# 1. Caminho Absoluto do SQLite e Configuração do Engine
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}"
 
-# Instanciação do engine com pool e conexões otimizados para testes
 engine = create_engine(
     DATABASE_URL,
     poolclass=NullPool,
     connect_args={"check_same_thread": False}
 )
-Base = declarative_base()
-
-# Diretriz técnica obrigatória: Criação global de tabelas abaixo do engine e Base
-Base.metadata.create_all(bind=engine)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-# Modelo de Banco de Dados
+# 2. Modelo de Banco de Dados SQLAlchemy
 class Lead(Base):
     __tablename__ = "leads"
 
     id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(100), nullable=False)
-    email = Column(String(150), unique=True, index=True, nullable=False)
-    telefone = Column(String(20), nullable=False)
-    aceitou_lgpd = Column(Boolean, nullable=False, default=False)
-    criado_em = Column(DateTime, default=datetime.utcnow)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    phone = Column(String, nullable=False)
+    company = Column(String, nullable=True)
+    role = Column(String, nullable=True)
+    consent = Column(Boolean, default=False, nullable=False)
 
-# Esquemas de Validação Pydantic (Apenas tipos primitivos e model_config)
+# 3. Schemas do Pydantic V2 com Tipagem Primitiva e ConfigDict
 class LeadCreate(BaseModel):
-    nome: str = Field(..., min_length=2, max_length=100)
-    email: str = Field(..., max_length=150)
-    telefone: str = Field(..., max_length=20)
-    aceitou_lgpd: bool
+    name: str = Field(..., min_length=2, max_length=100)
+    email: EmailStr
+    phone: str
+    company: Optional[str] = None
+    role: Optional[str] = None
+    consent: bool
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("telefone")
+    @field_validator("phone")
     @classmethod
-    def validate_telefone(cls, v: str) -> str:
-        # Validação explícita de telefone utilizando Raw String no regex
-        cleaned = re.sub(r"\s+", "", v)
-        phone_pattern = r"^\+?[0-9]{10,15}$|^\(?[1-9]{2}\)?\s?9?[0-9]{4}-?[0-9]{4}$"
-        if not re.match(phone_pattern, cleaned):
-            raise ValueError("Formato de telefone inválido. Use (XX) 9XXXX-XXXX ou apenas dígitos com DDD.")
+    def validate_phone(cls, v: str) -> str:
+        # Regex em raw string validando formato com ou sem DDD/máscara nacional
+        phone_regex = re.compile(r"^\+?(\d{2})?\s?\(?\d{2}\)?\s?\d{4,5}-?\d{4}$")
+        if not phone_regex.match(v):
+            raise ValueError("Formato de telefone inválido. Insira um número válido com DDD.")
         return v
 
-    @field_validator("email")
+    @field_validator("consent")
     @classmethod
-    def validate_email(cls, v: str) -> str:
-        # Validação explícita de e-mail utilizando Raw String no regex
-        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if not re.match(email_pattern, v):
-            raise ValueError("Endereço de e-mail inválido.")
-        return v
-
-    @field_validator("aceitou_lgpd")
-    @classmethod
-    def validate_lgpd(cls, v: bool) -> bool:
+    def validate_consent(cls, v: bool) -> bool:
         if not v:
-            raise ValueError("O consentimento para a LGPD é obrigatório.")
+            raise ValueError("O consentimento dos termos de privacidade (LGPD) é obrigatório.")
         return v
 
 class LeadResponse(BaseModel):
     id: int
-    nome: str
+    name: str
     email: str
-    telefone: str
-    aceitou_lgpd: bool
-    criado_em: datetime
+    phone: str
+    company: Optional[str] = None
+    role: Optional[str] = None
+    consent: bool
 
     model_config = ConfigDict(from_attributes=True)
 
-# Gerenciador de ciclo de vida (Lifespan)
+# 4. Gerenciamento de Contexto Lifespan do FastAPI
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Criação das Tabelas no arranque da aplicação
+    Base.metadata.create_all(bind=engine)
     yield
 
 app = FastAPI(
-    title="Landing Page Lead Capture API",
+    title="Microserviço de Captura de Leads",
     version="1.0.0",
     lifespan=lifespan
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Dependência da sessão do banco de dados
+# Dependência do Banco de Dados
 def get_db():
     db = SessionLocal()
     try:
@@ -110,106 +93,68 @@ def get_db():
     finally:
         db.close()
 
-# Endpoint para Captura de Leads (Cria ou atualiza com base no email - RN-01)
+# 5. Endpoints HTTP
 @app.post("/leads", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
-def create_lead(lead_in: LeadCreate, db: Session = Depends(get_db)):
+def create_lead(lead_in: LeadCreate, db=Depends(get_db)):
+    # Regra de Negócio: Impedir e-mails duplicados (RN-001)
     existing_lead = db.query(Lead).filter(Lead.email == lead_in.email).first()
-    
     if existing_lead:
-        # Atualiza o cadastro existente mantendo a unicidade do e-mail
-        existing_lead.nome = lead_in.nome
-        existing_lead.telefone = lead_in.telefone
-        existing_lead.aceitou_lgpd = lead_in.aceitou_lgpd
-        existing_lead.criado_em = datetime.utcnow()
-        db.commit()
-        db.refresh(existing_lead)
-        return existing_lead
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Este e-mail já foi cadastrado para outra oferta."
+        )
 
     db_lead = Lead(
-        nome=lead_in.nome,
+        name=lead_in.name,
         email=lead_in.email,
-        telefone=lead_in.telefone,
-        aceitou_lgpd=lead_in.aceitou_lgpd
+        phone=lead_in.phone,
+        company=lead_in.company,
+        role=lead_in.role,
+        consent=lead_in.consent
     )
     db.add(db_lead)
     db.commit()
     db.refresh(db_lead)
     return db_lead
 
-# Endpoint administrativo para listar leads
 @app.get("/leads", response_model=List[LeadResponse], status_code=status.HTTP_200_OK)
-def list_leads(db: Session = Depends(get_db)):
+def list_leads(db=Depends(get_db)):
     return db.query(Lead).all()
 
-# Endpoint para buscar lead específico
-@app.get("/leads/{lead_id}", response_model=LeadResponse, status_code=status.HTTP_200_OK)
-def get_lead(lead_id: int, db: Session = Depends(get_db)):
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
-    if not lead:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead não encontrado."
-        )
-    return lead
 
-# Código de Testes Unitários e Integração integrado para o Pytest
+# 6. Testes Unitários Integrados (Executados via Pytest)
 from fastapi.testclient import TestClient
 
-client = TestClient(app)
+def test_flow_leads():
+    with TestClient(app) as client:
+        # 1. Criação de lead válida
+        import uuid
+        unique_email = f"lead_{uuid.uuid4().hex[:8]}@empresa.com.br"
+        payload = {
+            "name": "Carlos Silva",
+            "email": unique_email,
+            "phone": "11988887777",
+            "company": "Tech Solutions",
+            "role": "CTO",
+            "consent": True
+        }
+        response = client.post("/leads", json=payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["email"] == unique_email
 
-def test_create_lead_success():
-    db = SessionLocal()
-    db.query(Lead).delete()
-    db.commit()
-    db.close()
+        # 2. Rejeição de e-mail duplicado (RN-001)
+        response_dup = client.post("/leads", json=payload)
+        assert response_dup.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "Este e-mail já foi cadastrado" in response_dup.json()["detail"]
 
-    payload = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "(11) 99999-9999",
-        "aceitou_lgpd": True
-    }
-    response = client.post("/leads", json=payload)
-    assert response.status_code == 201
-    assert response.json()["email"] == "joao.silva@email.com"
+        # 3. Rejeição por falta de consentimento LGPD (RN-002)
+        payload["email"] = f"outro_{uuid.uuid4().hex[:8]}@empresa.com"
+        payload["consent"] = False
+        response_consent = client.post("/leads", json=payload)
+        assert response_consent.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-def test_create_lead_update_existing():
-    payload_initial = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "(11) 99999-9999",
-        "aceitou_lgpd": True
-    }
-    client.post("/leads", json=payload_initial)
-
-    payload_updated = {
-        "nome": "João S. Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "11988888888",
-        "aceitou_lgpd": True
-    }
-    response = client.post("/leads", json=payload_updated)
-    assert response.status_code == 201
-    data = response.json()
-    assert data["nome"] == "João S. Silva"
-    assert "11988888888" in data["telefone"]
-
-def test_create_lead_invalid_phone():
-    payload = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "123",
-        "aceitou_lgpd": True
-    }
-    response = client.post("/leads", json=payload)
-    assert response.status_code == 422
-
-def test_create_lead_without_lgpd_consent():
-    payload = {
-        "nome": "João Silva",
-        "email": "joao.silva@email.com",
-        "telefone": "(11) 99999-9999",
-        "aceitou_lgpd": False
-    }
-    response = client.post("/leads", json=payload)
-    assert response.status_code == 422
+        # 4. Rejeição por formato de telefone inválido
+        payload["consent"] = True
+        payload["phone"] = "abc123"
+        response_phone = client.post("/leads", json=payload)
+        assert response_phone.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
