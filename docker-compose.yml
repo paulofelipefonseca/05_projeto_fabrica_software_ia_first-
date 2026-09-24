@@ -4,9 +4,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - lead_data:/app
+      - .:/app
     environment:
-      - PYTHONUNBUFFERED=1
-
-volumes:
-  lead_data:
+      - ENV=development

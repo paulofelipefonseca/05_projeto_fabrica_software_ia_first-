@@ -4,4 +4,5 @@ sqlalchemy
 pydantic
 email-validator
 requests
+httpx
 pytest
